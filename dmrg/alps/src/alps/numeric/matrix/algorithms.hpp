@@ -30,16 +30,20 @@
 
 #ifndef ALPS_MATRIX_ALGORITHMS_HPP
 #define ALPS_MATRIX_ALGORITHMS_HPP
+
 #include <vector>
 #include <stdexcept>
 #include <numeric>
 #include <alps/numeric/matrix/matrix_concept_check.hpp>
-
+#include <boost/numeric/bindings/remove_imaginary.hpp>
+#include <boost/numeric/bindings/is_complex.hpp>
+#include <boost/numeric/bindings/is_real.hpp>
 #include <boost/numeric/bindings/lapack/driver/gesvd.hpp>
 #include <boost/numeric/bindings/lapack/driver/gesdd.hpp>
 #include <boost/numeric/bindings/lapack/driver/syevd.hpp>
 #include <boost/numeric/bindings/lapack/driver/heevd.hpp>
 #include <boost/numeric/bindings/lapack/driver/geev.hpp>
+#include <boost/numeric/bindings/lapack/driver/ggevx.hpp>
 #include <boost/numeric/bindings/lapack/computational/geqrf.hpp>
 #include <boost/numeric/bindings/lapack/computational/orgqr.hpp>
 #include <boost/numeric/bindings/lapack/computational/gelqf.hpp>
@@ -351,13 +355,32 @@ namespace alps {
         }
 
         template<typename T, class MemoryBlock>
-        matrix<T, MemoryBlock> exp_hermitian (matrix<T, MemoryBlock> M, T const & alpha=1)
+        matrix<T, MemoryBlock> exp_hermitian (matrix<T, MemoryBlock> M, T const & alpha=1,
+                                              bool doShift=false)
         {
             matrix<T, MemoryBlock> N, tmp;
             typename associated_real_vector<matrix<T, MemoryBlock> >::type Sv(num_rows(M));
-
+            typedef typename boost::numeric::bindings::remove_imaginary< T >::type real_type;
+            //
             heev(M, N, Sv);
-
+            // Finds the maximum value of the eigevalues and subtract it
+            if (doShift) {
+                real_type maxEigen;
+                if (std::real(alpha) > 0.) {
+                    maxEigen = 0.;
+                    for (int iElement = 0; iElement < num_rows(M); iElement++)
+                        if (std::real(Sv[iElement]) > maxEigen)
+                            maxEigen = std::real(Sv[iElement]);
+                }
+                else {
+                    maxEigen = std::real(Sv[0]);
+                    for (int iElement = 1; iElement < num_rows(M); iElement++)
+                        if (std::real(Sv[iElement]) < maxEigen)
+                            maxEigen = std::real(Sv[iElement]);
+                }
+                for (int iElement = 0; iElement < num_rows(M); iElement++)
+                    Sv[iElement] -= maxEigen;
+            }
             typename associated_diagonal_matrix<matrix<T, MemoryBlock> >::type S(Sv);
             S = exp(alpha*S);
             gemm(N, S, tmp);
@@ -371,11 +394,14 @@ namespace alps {
            std::generate(elements(m).first, elements(m).second, g);
         }
 
+        // +===============================+
+        // == REAL-VALUED DIAGONALIZATION ==
+        // +===============================+
+
+        /** @brief Diagonalization returning eigenvalues and eigenvectors */
         template<typename T, class MemoryBlock>
-        void heev(matrix<T, MemoryBlock> M
-            , matrix<T, MemoryBlock> & evecs
-            , typename associated_real_vector<matrix<T, MemoryBlock> >::type & evals
-        )
+        void heev(matrix<T, MemoryBlock> M, matrix<T, MemoryBlock> & evecs,
+                  typename associated_real_vector<matrix<T, MemoryBlock> >::type & evals)
         {
             assert(num_rows(M) == num_cols(M));
             assert(evals.size() == num_rows(M));
@@ -395,10 +421,9 @@ namespace alps {
                           col(evecs, num_cols(M)-1-c).first);
         }
 
+        /** @brief Diagonalization returning eigenvalues */
         template<typename T, class MemoryBlock>
-        void heev(matrix<T, MemoryBlock> M
-           , typename associated_real_vector<matrix<T, MemoryBlock> >::type & evals
-        )
+        void heev(matrix<T, MemoryBlock> M, typename associated_real_vector<matrix<T, MemoryBlock> >::type & evals)
         {
             assert(num_rows(M) == num_cols(M));
             assert(evals.size() == num_rows(M));
@@ -412,6 +437,7 @@ namespace alps {
             std::reverse(evals.begin(), evals.end());
         }
 
+        /** @brief Overload taking a diagonal matrix */
         template<typename T, class MemoryBlock>
         void heev(matrix<T, MemoryBlock> M,
                   matrix<T, MemoryBlock> & evecs,
@@ -423,6 +449,7 @@ namespace alps {
             evals = typename associated_real_diagonal_matrix<matrix<T, MemoryBlock> >::type(evals_);
         }
 
+        /** @brief Overload with a different name of [heev] */
         template<typename T, class MemoryBlock, class ThirdArgument>
         void syev(matrix<T, MemoryBlock> M,
                   matrix<T, MemoryBlock> & evecs,
@@ -430,6 +457,116 @@ namespace alps {
         {
             heev(M, evecs, evals);
         }
+
+        // +=================================+
+        // == SOLUTION OF THE LINEAR SYSTEM ==
+        // +=================================+
+
+        /**
+         * @brief Routine to solve generalized eigenvalue problems 
+         * This overload retrieves separately the left and right eigenvectors, as well
+         * as the alpha and beta components of the eigenvalues.
+         */
+        template<typename T, class MemoryBlock>
+        typename boost::enable_if< boost::is_complex<T>, void>::type
+            ggev(matrix<T, MemoryBlock> M, matrix<T, MemoryBlock> overlapMatrix,
+                 typename associated_vector<matrix<T, MemoryBlock> >::type& alphaVec,
+                 typename associated_vector<matrix<T, MemoryBlock> >::type& betaVec,
+                 matrix<T, MemoryBlock>& leftEVecs, matrix<T, MemoryBlock>& rightEVecs,
+                 double threshold=1.0E-16)
+        {
+            // Consistency check
+            using RealType = typename boost::numeric::bindings::remove_imaginary<T>::type;
+            assert(num_rows(M) == num_cols(M));
+            assert(num_rows(M) == num_rows(overlapMatrix));
+            assert(num_cols(M) == num_cols(overlapMatrix));
+            typename boost::numeric::bindings::remove_imaginary<T>::type aNorm, bNorm;
+            // Variable definition
+            using VectorType = typename associated_vector<matrix<T, MemoryBlock> >::type;
+            using RealVectorType  = typename associated_vector<matrix<RealType, MemoryBlock> >::type;
+            RealVectorType leftPermutations(num_rows(M), 0.), rightPermutations(num_rows(M), 0.),
+                eValCond(num_rows(M), 0.), eVecCond(num_rows(M), 0.);
+            // Actual calculation
+            fortran_int_t minSize = 1, maxSize = num_rows(M);
+            boost::numeric::bindings::lapack::ggevx('B', 'V', 'V', 'B', M, overlapMatrix, alphaVec,
+                betaVec, leftEVecs, rightEVecs, minSize, maxSize, leftPermutations, rightPermutations,
+                aNorm, bNorm, eValCond, eVecCond);
+        }
+
+        /**
+         * @brief Routine to solve generalized eigenvalue problems 
+         * This overload retrieves directly the eigenvalues.
+         */
+        template<typename T, class MemoryBlock>
+        typename boost::enable_if< boost::is_complex<T>, void>::type
+            ggev(matrix<T, MemoryBlock> M, matrix<T, MemoryBlock> overlapMatrix,
+                 typename associated_vector<matrix<T, MemoryBlock> >::type & evals,
+                 matrix<T, MemoryBlock>& leftEVecs, matrix<T, MemoryBlock>& rightEVecs,
+                 double threshold=1.0E-16)
+        {
+            assert(num_rows(M) == num_cols(M));
+            assert(num_rows(M) == num_rows(overlapMatrix));
+            assert(num_cols(M) == num_cols(overlapMatrix));
+            assert(evals.size() == num_rows(M));
+            using VectorType = typename associated_vector<matrix<T, MemoryBlock> >::type;
+            VectorType alphaVec(num_rows(M), 0.), betaVec(num_rows(M), 0.);
+            ggev(M, overlapMatrix, alphaVec, betaVec, leftEVecs, rightEVecs, threshold);
+            // Loads the final results
+            for (int iVec = 0; iVec < num_rows(M); iVec++)
+                evals[iVec] = (std::abs(betaVec[iVec]) > threshold) ? alphaVec[iVec]/betaVec[iVec] : 0.;
+        }
+
+        /** @brief Routine to solve generalized eigenvalue problems */
+        template<typename T, class MemoryBlock>
+        typename boost::enable_if< boost::numeric::bindings::is_real<T>, void>::type
+            ggev(matrix<T, MemoryBlock> M, matrix<T, MemoryBlock> overlapMatrix,
+                 typename associated_vector<matrix<T, MemoryBlock> >::type & alphaVecReal,
+                 typename associated_vector<matrix<T, MemoryBlock> >::type & alphaVecImag,
+                 typename associated_vector<matrix<T, MemoryBlock> >::type & betaVec,
+                 matrix<T, MemoryBlock>& leftEVecs, matrix<T, MemoryBlock>& rightEVecs,
+                 double threshold=1.0E-16)
+        {
+            // Consistency check
+            using RealType = typename boost::numeric::bindings::remove_imaginary<T>::type;
+            assert(num_rows(M) == num_cols(M));
+            assert(num_rows(M) == num_rows(overlapMatrix));
+            assert(num_cols(M) == num_cols(overlapMatrix));
+            assert(alphaVecReal.size() == num_rows(M));
+            assert(alphaVecImag.size() == num_rows(M));
+            assert(betaVec.size() == num_rows(M));
+            RealType aNorm, bNorm;
+            // Variable definition
+            using VectorType = typename associated_vector<matrix<T, MemoryBlock> >::type;
+            using RealVectorType  = typename associated_vector<matrix<RealType, MemoryBlock> >::type;
+            RealVectorType leftPermutations(num_rows(M), 0.), rightPermutations(num_rows(M), 0.),
+                eValCond(num_rows(M), 0.), eVecCond(num_rows(M), 0.);
+            // Actual calculation
+            fortran_int_t minSize = 1, maxSize = num_rows(M);
+            boost::numeric::bindings::lapack::ggevx('B', 'V', 'V', 'B', M, overlapMatrix, alphaVecReal,
+                alphaVecImag, betaVec, leftEVecs, rightEVecs, minSize, maxSize, leftPermutations, rightPermutations,
+                aNorm, bNorm, eValCond, eVecCond);
+        }
+
+        /** @brief Routine to solve generalized eigenvalue problems */
+        template<typename T, class MemoryBlock>
+        typename boost::enable_if< boost::numeric::bindings::is_real<T>, void>::type
+            ggev(matrix<T, MemoryBlock> M, matrix<T, MemoryBlock> overlapMatrix,
+                 typename associated_vector<matrix<std::complex<T>, MemoryBlock> >::type & evals,
+                 matrix<T, MemoryBlock>& leftEVecs, matrix<T, MemoryBlock>& rightEVecs,
+                 double threshold=1.0E-16)
+        {
+            assert(num_rows(M) == num_cols(M));
+            assert(num_rows(M) == num_rows(overlapMatrix));
+            assert(num_cols(M) == num_cols(overlapMatrix));
+            assert(evals.size() == num_rows(M));
+            using VectorType = typename associated_vector<matrix<T, MemoryBlock> >::type;
+            VectorType alphaVecReal(num_rows(M), 0.), alphaVecImag(num_rows(M), 0.), betaVec(num_rows(M), 0.);
+            ggev(M, overlapMatrix, alphaVecReal, alphaVecImag, betaVec, leftEVecs, rightEVecs, threshold);
+            // Loads the final results
+            for (int iVec = 0; iVec < num_rows(M); iVec++)
+                evals[iVec] = (std::abs(betaVec[iVec]) > threshold) ? std::complex<T>(alphaVecReal[iVec], alphaVecImag[iVec])/betaVec[iVec] : 0.;
+        }
+
         /*
         * Some block_matrix algorithms necessitate nested specialization due to ambient scheduler
         * the algos are full rewritten or partly with subset specialization

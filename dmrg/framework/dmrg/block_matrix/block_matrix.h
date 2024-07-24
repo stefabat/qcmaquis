@@ -1,28 +1,9 @@
-/*****************************************************************************
- *
- * ALPS MPS DMRG Project
- *
- * Copyright (C) 2014 Institute for Theoretical Physics, ETH Zurich
- *               2011-2011 by Bela Bauer <bauerb@phys.ethz.ch>
- *
- * This software is part of the ALPS Applications, published under the ALPS
- * Application License; you can use, redistribute it and/or modify it under
- * the terms of the license, either version 1 or (at your option) any later
- * version.
- *
- * You should have received a copy of the ALPS Application License along with
- * the ALPS Applications; see the file LICENSE.txt. If not, the license is also
- * available from http://alps.comp-phys.org/.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
- * SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
- * FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- *
- *****************************************************************************/
+/**
+ * @file
+ * @copyright This code is licensed under the 3-clause BSD license.
+ *            Copyright ETH Zurich, Laboratory of Physical Chemistry, Reiher Group.
+ *            See LICENSE.txt for details.
+ */
 
 #ifndef BLOCK_MATRIX_H
 #define BLOCK_MATRIX_H
@@ -89,6 +70,11 @@ public:
     Index<SymmGroup> right_basis() const;
     DualIndex<SymmGroup> const & basis() const;
 
+    charge get_left_charge(std::size_t idx) const ;
+    charge get_right_charge(std::size_t idx) const ;
+    size_type get_left_dim(std::size_t idx) const ;
+    size_type get_right_dim(std::size_t idx) const ;
+
     void shift_basis(charge diff);
 
     std::string description() const;
@@ -144,6 +130,9 @@ public:
                       size_type new_r, size_type new_c,
                       bool pretend = false);
 
+    void add_block_to_row(block_matrix & rhs, charge r, charge c);
+    void add_block_to_column(block_matrix & rhs, charge r, charge c);
+
     friend void swap(block_matrix & x, block_matrix & y)
     {
         swap(x.data_, y.data_);
@@ -176,12 +165,20 @@ public:
 
     bool reasonable() const;
 
+    /** 
+     * @brief Calculates the overlap between block matrices
+     * 
+     * Note that the overlap is calculated by "vectorizing" the block matrix
+     */
+    scalar_type scalar_overlap(block_matrix<Matrix, SymmGroup> const & rhs) const;
+
 private:
     DualIndex<SymmGroup> basis_;
     boost::ptr_vector<Matrix> data_;
 };
 
 #include "dmrg/block_matrix/block_matrix.hpp"
+
 template<class Matrix, class SymmGroup>
 block_matrix<Matrix, SymmGroup> operator*(const typename block_matrix<Matrix,SymmGroup>::scalar_type& v,
                                           block_matrix<Matrix, SymmGroup> bm)
@@ -195,6 +192,22 @@ block_matrix<Matrix, SymmGroup> operator*(block_matrix<Matrix, SymmGroup> bm,
                                           const typename block_matrix<Matrix,SymmGroup>::scalar_type& v)
 {
     bm *= v;
+    return bm;
+}
+
+template<class Matrix, class SymmGroup>
+block_matrix<Matrix, SymmGroup> operator/(const typename block_matrix<Matrix,SymmGroup>::scalar_type& v,
+                                          block_matrix<Matrix, SymmGroup> bm)
+{
+    bm /= v;
+    return bm;
+}
+
+template<class Matrix, class SymmGroup>
+block_matrix<Matrix, SymmGroup> operator/(block_matrix<Matrix, SymmGroup> bm,
+                                          const typename block_matrix<Matrix,SymmGroup>::scalar_type& v)
+{
+    bm /= v;
     return bm;
 }
 

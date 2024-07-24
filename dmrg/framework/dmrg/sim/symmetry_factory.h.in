@@ -1,0 +1,204 @@
+/**
+ * @file
+ * @copyright This code is licensed under the 3-clause BSD license.
+ *            Copyright ETH Zurich, Laboratory of Physical Chemistry, Reiher Group.
+ *            See LICENSE.txt for details.
+ */
+
+#ifndef SYMMETRY_FACTORY_H
+#define SYMMETRY_FACTORY_H
+
+#include "dmrg/utils/DmrgParameters.h"
+#include "dmrg/block_matrix/symmetry.h"
+
+#undef tolower
+#undef toupper
+
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
+#include <boost/tokenizer.hpp>
+#include <map>
+#include <string>
+
+#include "utils/io.hpp"
+
+#include "dmrg/utils/guess_symmetry.h"
+#include "dmrg/utils/checks.h"
+
+// Macro to be used later in conjunction with BOOST to expand the switch case
+#define DECLCASE(z, nSymm, test)                                                  \
+    case nSymm:                                                                   \
+        std::cout << "Setting NU1 with N = " << nSymm << std::endl;               \
+      ret.reset(new typename TR::template F<NU1_template<nSymm>>::type(args...)); \
+      break;
+
+namespace dmrg {
+
+    /**
+     * @brief Factory class for the simulation object.
+     * 
+     * This factory class manages the creation of the simulation object.
+     * Note that the symmetry of the simulation is known only at runtime.
+     * For this reason, the DMRGInterface class has *not* SymmGroup among the template
+     * arguments.
+     * 
+     * Instead, we wrap insisde the trait class (here being TR, which corresponds to 
+     * [simulation_traits] defined in [maquis_dmrg.cpp]), which takes SymmGroup as a
+     * parameter, the definition of the type of the interface_sim object, and here we 
+     * instantiate all the possible symmetry groups.
+     * 
+     * @tparam TR Trait class that is used to obtain the type of the simulation object.
+     * @tparam Args Variadic template arguments 
+     * @param parms Parameter class (used to extract the proper symmetry group)
+     * @param args other parameters, that are funneled to the simulation constructor
+     * (this is, in practice, agains parms)
+     * @return TR::shared_ptr Smart pointer to the simulation object.
+     */
+
+    template <class TR, typename... Args>
+    typename TR::shared_ptr symmetry_factory(DmrgParameters & parms, Args& ... args)
+    {
+        typedef typename TR::shared_ptr ptr_type;
+
+        ptr_type ret;
+
+        std::string symm_name;
+        if (!parms.is_set("symmetry")) {
+#ifdef HAVE_NU1
+            symm_name = "nu1";
+#else
+            if (parms["model_library"] == "alps") // TODO: should be removed eventually
+                symm_name = guess_alps_symmetry(parms);
+            else
+            {
+                // obtain symmetry from checkpoint if exists
+                if (parms.is_set("chkpfile"))
+                {
+                    parms["symmetry"] = maquis::checks::detail::get_symmetry(parms["chkpfile"]);
+                    symm_name = parms["symmetry"].str();
+                }
+                else
+                    throw std::runtime_error("Symmetry is not set in the parameters and cannot be autodetected.");
+            }
+#endif
+        } else {
+            symm_name = parms["symmetry"].str();
+        }
+
+        maquis::cout << "This binary contains symmetries: ";
+#ifdef HAVE_NU1
+        maquis::cout << "nu1 ";
+#endif
+#ifdef HAVE_TrivialGroup
+        maquis::cout << "none ";
+#endif
+#ifdef HAVE_U1
+        maquis::cout << "u1 ";
+#endif
+#ifdef HAVE_U1DG
+        maquis::cout << "u1dg ";
+#endif
+#ifdef HAVE_TwoU1
+        maquis::cout << "2u1 ";
+#endif
+#ifdef HAVE_TwoU1PG
+        maquis::cout << "2u1pg ";
+#endif
+#ifdef HAVE_Ztwo
+        maquis::cout << "Z2 ";
+#endif
+#ifdef HAVE_SU2U1
+        maquis::cout << "su2u1 ";
+#endif
+#ifdef HAVE_SU2U1PG
+        maquis::cout << "su2u1pg ";
+#endif
+        maquis::cout << std::endl;
+
+        if (symm_name == "") // dummy if in case all ifdefs are false (unlikely)
+        {}
+#ifdef HAVE_NU1
+        else if (symm_name == "nu1") {
+            int numberOfSymmetries = 0;
+            if (parms["MODEL"] == std::string("PreBO")) {
+                std::vector<bool> isFermion;
+                std::vector<int> vec_ini_state;
+                std::string isFermion_str = parms["PreBO_FermionOrBosonVector"].as<std::string>();
+                std::istringstream is( isFermion_str );
+                isFermion.assign(std::istream_iterator<int>( is ), std::istream_iterator<int>() );
+                std::string vec_ini_state_str = parms["PreBO_InitialStateVector"].as<std::string>();
+                is.clear();
+                is.str(vec_ini_state_str);
+                vec_ini_state.assign(std::istream_iterator<int>( is ), std::istream_iterator<int>() );
+                for (const auto iElement: isFermion)
+                    numberOfSymmetries += (iElement) ? 2 : 1;
+                if (vec_ini_state.size() != numberOfSymmetries) {
+                    throw std::runtime_error("PreBO_InitialStateVector input Error.");
+                }
+            }
+            else if (parms["MODEL"] == std::string("nmode")) {
+                numberOfSymmetries = parms["nmode_num_modes"];
+            }
+            else {
+                throw std::runtime_error("NU1 model not recognized");
+            }
+            // Sets the number of N that is required for the NU1 symmetry group
+            switch (numberOfSymmetries) {
+                // All numsymm from 1 including to 6 are always compiled as they are needed for the test suite
+                BOOST_PP_REPEAT_FROM_TO(1, 7, DECLCASE, ~)
+#if @DMRG_NUMSYMM@ > 6
+                // For large molecules, also compile that specific NUMSYMM
+                case @DMRG_NUMSYMM@:
+                    std::cout << "Setting NU1 with N = " << @DMRG_NUMSYMM@ << std::endl;
+                    ret.reset(new typename TR::template F<NU1_template<@DMRG_NUMSYMM@>>::type(args...));
+                    break;
+#endif
+                default:
+                    throw std::runtime_error("Please recompile QCMaquis with the correct DMRG_NUMSYMM value");
+                    break;
+            }
+        }
+#endif
+#ifdef HAVE_TrivialGroup
+        else if (symm_name == "none")
+            ret.reset(new typename TR::template F<TrivialGroup>::type(args...));
+#endif
+#ifdef HAVE_U1
+        else if (symm_name == "u1")
+            ret.reset(new typename TR::template F<U1>::type(args...));
+#endif
+#ifdef HAVE_U1DG
+        else if (symm_name == "u1dg")
+            ret.reset(new typename TR::template F<U1DG>::type(args...));
+#endif
+#ifdef HAVE_TwoU1
+        else if (symm_name == "2u1")
+            ret.reset(new typename TR::template F<TwoU1>::type(args...));
+#endif
+#ifdef HAVE_TwoU1PG
+        else if (symm_name == "2u1pg")
+            ret.reset(new typename TR::template F<TwoU1PG>::type(args...));
+#endif
+#ifdef HAVE_Ztwo
+        else if (symm_name == "Z2")
+            ret.reset(new typename TR::template F<Ztwo>::type(args...));
+#endif
+#ifdef HAVE_SU2U1
+        else if (symm_name == "su2u1")
+            ret.reset(new typename TR::template F<SU2U1>::type(args...));
+#endif
+#ifdef HAVE_SU2U1PG
+        else if (symm_name == "su2u1pg")
+            ret.reset(new typename TR::template F<SU2U1PG>::type(args...));
+#endif
+        else
+            throw std::runtime_error("Don't know this symmetry group. Please, check your compilation flags.");
+
+        return ret;
+
+        parallel::sync();
+        return ptr_type();
+    }
+
+}
+
+#endif

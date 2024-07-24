@@ -1,0 +1,20 @@
+/**
+ * @file
+ * @copyright This code is licensed under the 3-clause BSD license.
+ *            Copyright ETH Zurich, Laboratory of Physical Chemistry, Reiher Group.
+ *            See LICENSE.txt for details.
+ */
+
+#include "dmrg/sim/interface_sim.h"
+#include "dmrg/sim/matrix_types.h"
+
+#define IMPL_MODEL_REAL(z, n, test) template class interface_sim<matrix,NU1_template<n>>;
+#define IMPL_MODEL_COMPLEX(z, n, test) template class interface_sim<cmatrix,NU1_template<n>>;
+
+BOOST_PP_REPEAT_FROM_TO(1, 7, IMPL_MODEL_REAL, ~)
+BOOST_PP_REPEAT_FROM_TO(1, 7, IMPL_MODEL_COMPLEX, ~)
+
+#if @DMRG_NUMSYMM@ > 6
+    template class interface_sim<matrix,NU1_template<@DMRG_NUMSYMM@>>;
+    template class interface_sim<cmatrix,NU1_template<@DMRG_NUMSYMM@>>;
+#endif

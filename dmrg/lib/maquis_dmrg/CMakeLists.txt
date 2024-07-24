@@ -9,6 +9,7 @@ endif(USE_AMBIENT)
 
 # *** Configure symmetries
 configure_symm_file("maquis_dmrg_symm/maquis_dmrg_tpl.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/simulation_symm/simulation_{SYMM}.cpp" CMAKE_SYMM_GROUP)
+configure_file("maquis_dmrg_symm/maquis_dmrg_tpl_nu1.cpp.in" "${CMAKE_CURRENT_BINARY_DIR}/simulation_symm/simulation_nu1.cpp")
 get_symm_files(APPEND DMRG_SYMM_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/simulation_symm/simulation_{SYMM}.cpp")
 
 
@@ -17,8 +18,9 @@ add_library(maquis_dmrg SHARED ${DMRG_SYMM_SOURCES} maquis_dmrg.cpp maquis_cinte
 set_property(TARGET maquis_dmrg PROPERTY POSITION_INDEPENDENT_CODE TRUE)
 if(APPLE)
   target_link_libraries(maquis_dmrg ${DMRG_APP_LIBRARIES} "-framework Accelerate")
-else()
+# else()
 #   target_link_libraries(maquis_dmrg ${DMRG_APP_LIBRARIES})
+#   target_link_libraries(maquis_dmrg Eigen3::Eigen)
 endif()
 
 # *** Install

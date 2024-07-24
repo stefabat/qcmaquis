@@ -1,29 +1,9 @@
-/*****************************************************************************
- *
- * QCMaquis DMRG Project
- *
- * Copyright (C) 2015 Laboratory for Physical Chemistry, ETH Zurich
- *               2012-2015 by Sebastian Keller <sebkelle@phys.ethz.ch>
- *
- *
- * This software is part of the ALPS Applications, published under the ALPS
- * Application License; you can use, redistribute it and/or modify it under
- * the terms of the license, either version 1 or (at your option) any later
- * version.
- *
- * You should have received a copy of the ALPS Application License along with
- * the ALPS Applications; see the file LICENSE.txt. If not, the license is also
- * available from http://alps.comp-phys.org/.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
- * SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
- * FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- *
- *****************************************************************************/
+/**
+ * @file
+ * @copyright This code is licensed under the 3-clause BSD license.
+ *            Copyright ETH Zurich, Laboratory of Physical Chemistry, Reiher Group.
+ *            See LICENSE.txt for details.
+ */
 
 #ifndef QC_TERMMAKER_H
 #define QC_TERMMAKER_H
@@ -39,10 +19,9 @@ struct TermMaker {
     typedef typename term_descriptor::value_type pos_op_t;
     typedef typename S::subcharge sc_t;
 
-    static bool compare_tag(pos_op_t p1,
-                            pos_op_t p2)
+    static bool compare_tag(const pos_op_t& p1, const pos_op_t& p2)
     {
-        return boost::tuples::get<0>(p1) < boost::tuples::get<0>(p2);
+        return p1.first < p2.first;
     }
 
     static term_descriptor two_term(bool sign, std::vector<tag_type> const & fill_op, value_type scale, pos_t i, pos_t j,
@@ -53,8 +32,8 @@ struct TermMaker {
         term_descriptor term;
         term.is_fermionic = sign;
         term.coeff = scale;
-        term.push_back(boost::make_tuple(i, op1[lat.get_prop<sc_t>("type", i)]));
-        term.push_back(boost::make_tuple(j, op2[lat.get_prop<sc_t>("type", j)]));
+        term.push_back(std::make_pair(i, op1[lat.get_prop<sc_t>("type", i)]));
+        term.push_back(std::make_pair(j, op2[lat.get_prop<sc_t>("type", j)]));
         return term;
     }
 
@@ -70,14 +49,14 @@ struct TermMaker {
         std::pair<tag_type, value_type> ptag;
         if (i < j) {
             ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", i)], op1[lat.get_prop<sc_t>("type", i)]);
-            term.push_back(boost::make_tuple(i, ptag.first));
-            term.push_back(boost::make_tuple(j, op2[lat.get_prop<sc_t>("type", j)]));
+            term.push_back(std::make_pair(i, ptag.first));
+            term.push_back(std::make_pair(j, op2[lat.get_prop<sc_t>("type", j)]));
             term.coeff *= ptag.second;
         }
         else {
             ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", j)], op2[lat.get_prop<sc_t>("type", j)]);
-            term.push_back(boost::make_tuple(i, op1[lat.get_prop<sc_t>("type", i)]));
-            term.push_back(boost::make_tuple(j, ptag.first));
+            term.push_back(std::make_pair(i, op1[lat.get_prop<sc_t>("type", i)]));
+            term.push_back(std::make_pair(j, ptag.first));
             term.coeff *= -ptag.second;
         }
         return term;
@@ -99,14 +78,14 @@ struct TermMaker {
         std::pair<tag_type, value_type> ptag;
         if (i < j) {
             ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", i)], pre_ptag.first);
-            term.push_back(boost::make_tuple(i, ptag.first));
-            term.push_back(boost::make_tuple(j, op3[lat.get_prop<sc_t>("type", j)]));
+            term.push_back(std::make_pair(i, ptag.first));
+            term.push_back(std::make_pair(j, op3[lat.get_prop<sc_t>("type", j)]));
             term.coeff *= ptag.second * pre_ptag.second;
         }
         else {
             ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", j)], op3[lat.get_prop<sc_t>("type", j)]);
-            term.push_back(boost::make_tuple(i, pre_ptag.first));
-            term.push_back(boost::make_tuple(j, ptag.first));
+            term.push_back(std::make_pair(i, pre_ptag.first));
+            term.push_back(std::make_pair(j, ptag.first));
             term.coeff *= -ptag.second * pre_ptag.second;
         }
         return term;
@@ -155,9 +134,9 @@ struct TermMaker {
         }
 
         std::vector<pos_op_t> sterm;
-        sterm.push_back( boost::make_tuple(pb, boson_op) );
-        sterm.push_back( boost::make_tuple(p1, op1) );
-        sterm.push_back( boost::make_tuple(p2, op2) );
+        sterm.push_back( std::make_pair(pb, boson_op) );
+        sterm.push_back( std::make_pair(p1, op1) );
+        sterm.push_back( std::make_pair(p2, op2) );
         std::sort(sterm.begin(), sterm.end(), compare_tag);
 
         term.push_back(sterm[0]);
@@ -186,18 +165,18 @@ struct TermMaker {
                 if(idx[c1] > idx[c2]) inv_count++;
 
         std::vector<pos_op_t> sterm;
-        sterm.push_back(boost::make_tuple(i, op_i[lat.get_prop<sc_t>("type", i)]));
-        sterm.push_back(boost::make_tuple(j, op_j[lat.get_prop<sc_t>("type", j)]));
-        sterm.push_back(boost::make_tuple(k, op_k[lat.get_prop<sc_t>("type", k)]));
-        sterm.push_back(boost::make_tuple(l, op_l[lat.get_prop<sc_t>("type", l)]));
+        sterm.push_back(std::make_pair(i, op_i[lat.get_prop<sc_t>("type", i)]));
+        sterm.push_back(std::make_pair(j, op_j[lat.get_prop<sc_t>("type", j)]));
+        sterm.push_back(std::make_pair(k, op_k[lat.get_prop<sc_t>("type", k)]));
+        sterm.push_back(std::make_pair(l, op_l[lat.get_prop<sc_t>("type", l)]));
         std::sort(sterm.begin(), sterm.end(), compare_tag);
 
         std::pair<tag_type, value_type> ptag;
-        ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", boost::tuples::get<0>(sterm[0]))], boost::tuples::get<1>(sterm[0]));
-        boost::tuples::get<1>(sterm[0]) = ptag.first;
+        ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", sterm[0].first)], sterm[0].second);
+        sterm[0].second = ptag.first;
         term.coeff *= ptag.second;
-        ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", boost::tuples::get<0>(sterm[2]))], boost::tuples::get<1>(sterm[2]));
-        boost::tuples::get<1>(sterm[2]) = ptag.first;
+        ptag = op_table->get_product_tag(fill_op[lat.get_prop<sc_t>("type", sterm[2].first)], sterm[2].second);
+        sterm[2].second = ptag.first;
         term.coeff *= ptag.second;
 
         if (inv_count % 2)

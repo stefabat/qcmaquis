@@ -1,0 +1,23 @@
+/**
+ * @file
+ * @copyright This code is licensed under the 3-clause BSD license.
+ *            Copyright ETH Zurich, Laboratory of Physical Chemistry, Reiher Group.
+ *            See LICENSE.txt for details.
+ */
+
+#include "dmrg/sim/matrix_types.h"
+#include "dmrg/models/model_factory.ipp"
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
+
+${MAQUIS_INCLUDE_FACTORIES_NU1}
+
+#define IMPL_MODEL_REAL(z, nOfSymm, test) impl_model_factory(matrix, NU1_template<nOfSymm>)
+#define IMPL_MODEL_COMPLEX(z, nOfSymm, test) impl_model_factory(cmatrix, NU1_template<nOfSymm>)
+
+BOOST_PP_REPEAT_FROM_TO(1, 7, IMPL_MODEL_REAL, ~)
+BOOST_PP_REPEAT_FROM_TO(1, 7, IMPL_MODEL_COMPLEX, ~)
+
+#if @DMRG_NUMSYMM@ > 6
+    impl_model_factory(matrix, NU1_template<@DMRG_NUMSYMM@>)
+    impl_model_factory(cmatrix, NU1_template<@DMRG_NUMSYMM@>)
+#endif

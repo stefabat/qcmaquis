@@ -1,30 +1,9 @@
-/*****************************************************************************
- *
- * QCMaquis DMRG Project
- *
- * Copyright (C) 2015 Laboratory for Physical Chemistry, ETH Zurich
- *               2012-2015 by Sebastian Keller <sebkelle@phys.ethz.ch>
- *               2015-2015 by Stefano Battaglia <stefabat@ethz.ch>
- *
- *
- * This software is part of the ALPS Applications, published under the ALPS
- * Application License; you can use, redistribute it and/or modify it under
- * the terms of the license, either version 1 or (at your option) any later
- * version.
- *
- * You should have received a copy of the ALPS Application License along with
- * the ALPS Applications; see the file LICENSE.txt. If not, the license is also
- * available from http://alps.comp-phys.org/.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. IN NO EVENT
- * SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE
- * FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
- * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
- *
- *****************************************************************************/
+/**
+ * @file
+ * @copyright This code is licensed under the 3-clause BSD license.
+ *            Copyright ETH Zurich, Laboratory of Physical Chemistry, Reiher Group.
+ *            See LICENSE.txt for details.
+ */
 
 #ifndef REL_QC_MODEL_H
 #define REL_QC_MODEL_H
@@ -48,20 +27,18 @@
 #include "dmrg/models/chem/rel/chem_helper.h"
 #include "dmrg/utils/checks.h"
 
-template<class Matrix, class SymmGroup>
-class rel_qc_model : public model_impl<Matrix, SymmGroup>
+template<class SymmGroup>
+class rel_qc_model : public model_impl<cmatrix, SymmGroup>
 {
+    using Matrix = cmatrix;
     typedef model_impl<Matrix, SymmGroup> base;
-
     typedef typename base::table_type table_type;
     typedef typename base::table_ptr table_ptr;
     typedef typename base::tag_type tag_type;
-
     typedef typename base::term_descriptor term_descriptor;
     typedef typename base::terms_type terms_type;
     typedef typename base::op_t op_t;
     typedef typename base::measurements_type measurements_type;
-
     typedef typename Lattice::pos_t pos_t;
     typedef typename Matrix::value_type value_type;
     typedef typename alps::numeric::associated_one_matrix<Matrix>::type one_matrix;
@@ -76,7 +53,6 @@ public:
     {
         // TODO: update this->terms_ with the new parameters
         throw std::runtime_error("update() not yet implemented for this model.");
-        return;
     }
 
     Index<SymmGroup> const & phys_dim(size_t type) const
@@ -84,10 +60,12 @@ public:
         // type == site for lattice = spinors
         return phys_indices[type];
     }
+    
     tag_type identity_matrix_tag(size_t type) const
     {
         return ident[type];
     }
+
     tag_type filling_matrix_tag(size_t type) const
     {
         return fill[type];
@@ -96,9 +74,9 @@ public:
     bool is_term_allowed(int i, int j, int k, int l)
     {
         typename SymmGroup::charge I(0), J(0), K(0), L(0), tmp(0);
-        typename SymmGroup::charge charges[] = {I,J,K,L};
-        std::size_t site[] = {i, j, k, l};
-        for (int ii=0; ii<4; ++ii) {
+        std::vector< typename SymmGroup::charge > charges = {I, J, K, L};
+        std::vector< int > site = {i, j, k, l};
+        for (int ii = 0; ii < 4; ++ii) {
             charges[ii][1] = lat.get_prop<int>("type", site[ii]);
             charges[ii][0] = 1;
         	if (ii%2 == 0) {
@@ -106,9 +84,13 @@ public:
         	else if (ii%2 == 1) {
             	tmp = SymmGroup::fuse(tmp, -charges[ii]);}
         }
-
-        if (tmp[0] == 0 && tmp[1] != parms["type"]) {return false;}
-        else {return true;}
+        //
+        if (tmp[0] == 0 && tmp[1] != parms["type"]) {
+            return false;
+        }
+        else {
+            return true;
+        }
     }
 
     typename SymmGroup::charge total_quantum_numbers(BaseParameters & parms_) const

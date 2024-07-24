@@ -14,4 +14,12 @@ if (BUILD_MPS_COMPRESS)
   add_subdirectory(compress)
 endif (BUILD_MPS_COMPRESS)
 
+if (BUILD_DMRG_EVOLVE)
+  add_subdirectory(evolve)
+endif (BUILD_DMRG_EVOLVE)
+
+if (BUILD_DMRG_FEAST)
+  add_subdirectory(feast)
+endif (BUILD_DMRG_FEAST)
+
 add_subdirectory(tools)
